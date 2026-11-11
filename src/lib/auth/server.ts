@@ -29,7 +29,7 @@
  * components read the user via `@/lib/auth/use-current-user`; server functions get
  * a verified id via `@/lib/auth/middleware`.
  */
-import { betterAuth } from "better-auth";
+import { betterAuth, APIError } from "better-auth";
 import { bearer, genericOAuth } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { getCookie } from "@tanstack/react-start/server";
@@ -37,6 +37,7 @@ import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
 import { ensureDbReady, getPglite } from "../db";
 import { emailAndPasswordEnabled } from "./email-password";
+import { ihgEmail } from "../access";
 import { GATE_PROVIDER_ID, gateIdentitySessions } from "./gate-session.server";
 import { GROK_PROVIDERS } from "./providers";
 import { pgliteDialect } from "./pglite-dialect";
@@ -212,6 +213,33 @@ export const auth = betterAuth({
 
   // Local email/password — toggled only via `./email-password` (not a plugin).
   ...(emailAndPasswordEnabled ? { emailAndPassword: { enabled: true } } : {}),
+
+  // After the first admin exists, a new login can only be created for an
+  // invited @ihg.com address. The existing admin account is left as it is.
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user) => {
+          const email = String(user.email ?? "").trim().toLowerCase();
+          const { getSql } = await import("../db");
+          const sql = await getSql();
+          const admins = await sql<{ user_id: string }>`select user_id from fontenot_admin limit 1`;
+          if (!admins[0]) return;
+          if (!ihgEmail(email)) {
+            throw new APIError("BAD_REQUEST", { message: "Use an @ihg.com email address." });
+          }
+          const invited = await sql<{ status: string }>`
+            select status from fontenot_invite where email = ${email}
+          `;
+          if (invited[0]?.status !== "invited") {
+            throw new APIError("BAD_REQUEST", {
+              message: "Ask the site admin for an invitation before creating a login.",
+            });
+          }
+        },
+      },
+    },
+  },
 
   // `__Host-` prefixed cookies: the browser REFUSES any same-named cookie that
   // carries a `Domain` attribute, so a sibling `*.grok.me` app cannot "toss" a
