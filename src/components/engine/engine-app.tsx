@@ -18,7 +18,9 @@ import { PmOverviewCard, PmPasteCard, PmTab, RoomsTab } from "@/components/engin
 import { PmBoard } from "@/components/engine/pm-board";
 import { formatMdY, formatShiftStamp, pctLabel, toIsoDate, weekdayName } from "@/lib/engine/duration.ts";
 import { workOrdersForIssue } from "@/lib/engine/compute.ts";
-import { adminStatus } from "@/lib/admin.functions";
+import { siteAccess } from "@/lib/access.functions";
+import { SiteSignIn } from "@/components/engine/site-login";
+import { signOut } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getPublishedReport } from "@/lib/report.functions";
 import { applyPublishedSource, applyStoredEngine, sharePublished, useEngine } from "@/lib/engine/store.ts";
@@ -41,6 +43,7 @@ export function EngineApp() {
   const { report, error, busy, loadedFrom, loadFiles } = useEngine();
   const { user, isPending } = useCurrentUserState();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [gate, setGate] = useState<"loading" | "in" | "out">("loading");
   const [accessReady, setAccessReady] = useState(false);
   const [sharedState, setSharedState] = useState<"pending" | "empty" | "filled">("pending");
   const [tab, setTab] = useState<Tab>("overview");
@@ -57,6 +60,7 @@ export function EngineApp() {
   const [quoreOpen, setQuoreOpen] = useState(false);
   useLayoutEffect(() => {
     applyStoredEngine();
+    if (gate !== "in") return;
     let cancelled = false;
     void getPublishedReport()
       .then((published) => {
@@ -74,21 +78,38 @@ export function EngineApp() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [gate]);
   useEffect(() => {
     if (isPending) return;
     if (!user) {
       setIsAdmin(false);
+      setGate("out");
       setAccessReady(true);
       return;
     }
     let cancelled = false;
-    void adminStatus()
-      .then((status) => {
-        if (!cancelled) setIsAdmin(status.isAdmin);
+    void siteAccess()
+      .then(async (access) => {
+        if (cancelled) return;
+        if (!access.allowed) {
+          const message =
+            access.reason === "unverified"
+              ? "That address is not verified yet. Open the invitation link first."
+              : access.reason === "revoked"
+                ? "That invitation is no longer active."
+                : "That account cannot view this report.";
+          sessionStorage.setItem("fontenot-signin-error", message);
+          await signOut("/");
+          return;
+        }
+        setIsAdmin(access.role === "admin");
+        setGate("in");
       })
       .catch(() => {
-        if (!cancelled) setIsAdmin(false);
+        if (!cancelled) {
+          setIsAdmin(false);
+          setGate("out");
+        }
       })
       .finally(() => {
         if (!cancelled) setAccessReady(true);
@@ -176,7 +197,7 @@ export function EngineApp() {
     void ingest(Array.from(e.dataTransfer.files));
   }
 
-  return (
+  return gate === "in" ? (
     <div className="min-h-screen bg-bg text-fg">
       <Header
         report={report}
@@ -309,6 +330,10 @@ export function EngineApp() {
         </div>
       </main>
     </div>
+  ) : gate === "loading" || isPending ? (
+    <div className="min-h-screen bg-bg" />
+  ) : (
+    <SiteSignIn />
   );
 }
 

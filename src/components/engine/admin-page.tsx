@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardHint, CardTitle } from "@/components/ui/card";
 import { HistoryAdmin } from "@/components/engine/history-panel";
+import { UsersAdmin } from "@/components/engine/users-panel";
 import { HotelInventoryAdmin, YtdPmAdmin } from "@/components/engine/pm-panel";
 import { YtdWorkOrdersAdmin } from "@/components/engine/wo-ytd-panel";
 import { adminStatus, claimAdmin } from "@/lib/admin.functions";
@@ -23,7 +24,7 @@ import { applyStoredEngine, useEngine } from "@/lib/engine/store";
 import type { ReportModel } from "@/lib/engine/types";
 import { cn } from "@/lib/utils";
 
-type AdminTab = "inventory" | "ytd" | "ytdwo" | "reporting" | "validation" | "runbook";
+type AdminTab = "inventory" | "ytd" | "ytdwo" | "reporting" | "validation" | "runbook" | "users";
 
 const ADMIN_TABS: { id: AdminTab; label: string }[] = [
   { id: "inventory", label: "Hotel inventory" },
@@ -32,6 +33,7 @@ const ADMIN_TABS: { id: AdminTab; label: string }[] = [
   { id: "reporting", label: "Reporting" },
   { id: "validation", label: "Validation" },
   { id: "runbook", label: "Runbook" },
+  { id: "users", label: "Users" },
 ];
 
 export function AdminPage() {
@@ -139,6 +141,7 @@ function AdminTools({
         {tab === "reporting" && <HistoryAdmin onOpenYtd={() => onTab("ytdwo")} />}
         {tab === "validation" && <Validation report={report} />}
         {tab === "runbook" && <Runbook />}
+        {tab === "users" && <UsersAdmin />}
       </div>
     </div>
   );
