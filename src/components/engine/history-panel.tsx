@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardHint, CardTitle } from "@/components/ui/card";
 import { formatMdY } from "@/lib/engine/duration.ts";
 import { countByEngineerYear, dedupeTickets, filterHistoryTickets, rankBy, type HistoryTicket, type YearCount } from "@/lib/engine/history";
-import { deleteArchiveWeek, archivePastWeek, getReportHistory, type ReportHistory } from "@/lib/report.functions";
+import { deleteArchiveWeek, archivePastWeek, exportSavedData, getReportHistory, publishReport, replaceWorkOrderLedger, type ReportHistory } from "@/lib/report.functions";
 import { cn } from "@/lib/utils";
 
 export function HistoryAdmin({ onOpenYtd }: { onOpenYtd?: () => void }) {
@@ -130,6 +130,7 @@ export function HistoryAdmin({ onOpenYtd }: { onOpenYtd?: () => void }) {
             </Button>
           ) : null}
         </Card>
+        <SavedDataCard onRestored={() => void load()} />
         <PastWeekUpload onSaved={() => void load()} />
       </div>
     );
@@ -142,6 +143,7 @@ export function HistoryAdmin({ onOpenYtd }: { onOpenYtd?: () => void }) {
   return (
     <div className="grid gap-4">
       {error ? <p className="text-sm text-critical">{error}</p> : null}
+      <SavedDataCard onRestored={() => void load()} />
       <Card>
         <CardHeader>
           <div>
@@ -328,6 +330,95 @@ export function HistoryAdmin({ onOpenYtd }: { onOpenYtd?: () => void }) {
       </Card>
       </div>
     </div>
+  );
+}
+
+function SavedDataCard({ onRestored }: { onRestored: () => void }) {
+  const [busy, setBusy] = useState<"down" | "up" | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function download() {
+    setBusy("down");
+    setError(null);
+    setMessage(null);
+    try {
+      const file = await exportSavedData();
+      const bytes = Uint8Array.from(atob(file.base64), (char) => char.charCodeAt(0));
+      const blob = new Blob([bytes], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = file.fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setMessage(`Downloaded ${file.weeks} saved week${file.weeks === 1 ? "" : "s"}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not download the saved data.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function restore(file: File | null) {
+    if (!file) return;
+    setBusy("up");
+    setError(null);
+    setMessage(null);
+    try {
+      const { parseTransferWorkbook } = await import("@/lib/engine/transfer.ts");
+      const parsed = await parseTransferWorkbook(await file.arrayBuffer());
+      let current = parsed.weeks.find((week) => week.current) ?? parsed.weeks[0];
+      for (const week of parsed.weeks) {
+        if (week.current) current = week;
+        else await archivePastWeek({ data: week.source });
+      }
+      if (current) await publishReport({ data: current.source });
+      if (parsed.ledger) await replaceWorkOrderLedger({ data: parsed.ledger });
+      setMessage(`Restored ${parsed.weeks.length} week${parsed.weeks.length === 1 ? "" : "s"}.`);
+      onRestored();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not restore that file.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div>
+          <CardTitle>Move saved data</CardTitle>
+          <CardHint>One Excel file with every saved week, the PM dates, and the year-to-date work orders</CardHint>
+        </div>
+      </CardHeader>
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <Button disabled={busy !== null} onClick={() => void download()}>
+          {busy === "down" ? <Loader2 className="animate-spin" /> : null}
+          Download all saved data
+        </Button>
+        <label className="inline-flex h-11 cursor-pointer items-center justify-center rounded-md border border-border bg-bg px-4 text-sm font-medium">
+          {busy === "up" ? "Restoring…" : "Restore a saved-data file"}
+          <input
+            type="file"
+            accept=".xlsx,.xls"
+            className="sr-only"
+            disabled={busy !== null}
+            onChange={(e) => {
+              const next = e.target.files?.[0] ?? null;
+              e.target.value = "";
+              void restore(next);
+            }}
+          />
+        </label>
+      </div>
+      {error ? <p className="mt-3 text-sm text-critical">{error}</p> : null}
+      {message ? <p className="mt-3 text-sm text-good">{message}</p> : null}
+    </Card>
   );
 }
 
