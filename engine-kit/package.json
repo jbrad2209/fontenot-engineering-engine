@@ -1,0 +1,15 @@
+{
+  "name": "fontenot-engineering-engine",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Kimpton Hotel Fontenot weekly engineering productivity reporting engine",
+  "bin": {
+    "fontenot-report": "./report.cjs"
+  },
+  "scripts": {
+    "report": "node report.cjs"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0"
+  }
+}
