@@ -19,6 +19,7 @@ import {
   sourceRowsToTickets,
   type WoLedger,
 } from "@/lib/engine/wo-ledger";
+import { buildTransferWorkbook, type TransferWeek } from "@/lib/engine/transfer";
 import type { Sql } from "@/lib/db";
 
 const optionalAuth = createMiddleware({ type: "function" })
@@ -357,6 +358,69 @@ function readPm(payload: string): PmSource | undefined {
     return undefined;
   }
 }
+
+export const replaceWorkOrderLedger = createServerFn({ method: "POST" })
+  .middleware([optionalAuth])
+  .validator((data: unknown) => {
+    if (!data || typeof data !== "object") throw new Error("Missing work-order list.");
+    const rec = data as Partial<WoLedger>;
+    if (!Array.isArray(rec.base) || !Array.isArray(rec.added)) throw new Error("Missing work-order list.");
+    return { base: rec.base, added: rec.added };
+  })
+  .handler(async ({ context, data }) => {
+    const sql = await adminSql(context.userId, HISTORY_SIGN_IN);
+    await writeLedger(sql, data);
+    return ledgerSummary(data, new Date().toISOString());
+  });
+
+export const exportSavedData = createServerFn({ method: "GET" })
+  .middleware([optionalAuth])
+  .handler(async ({ context }) => {
+    await ensureBundledWeek();
+    const sql = await adminSql(context.userId, HISTORY_SIGN_IN);
+    const archived = await sql<{ id: string; payload: string }>`
+      select id, payload from fontenot_archive
+      order by period_end desc, period_start desc
+    `;
+    const published = await sql<{ payload: string }>`select payload from fontenot_published where id = 1`;
+    let currentId = "";
+    if (published[0]?.payload) {
+      try {
+        const report = buildReport(asSource(JSON.parse(published[0].payload)));
+        currentId = historyWeekId(report.period.start, report.period.end);
+      } catch {
+        currentId = "";
+      }
+    }
+    const weeks: TransferWeek[] = [];
+    const seen = new Set<string>();
+    for (const row of archived) {
+      try {
+        const source = asSource(JSON.parse(row.payload));
+        weeks.push({ source, current: row.id === currentId });
+        seen.add(row.id);
+      } catch {
+        /* Skip a week that can no longer be read. */
+      }
+    }
+    if (published[0]?.payload && currentId && !seen.has(currentId)) {
+      try {
+        weeks.unshift({ source: asSource(JSON.parse(published[0].payload)), current: true });
+      } catch {
+        /* The live week is already represented, or it cannot be read. */
+      }
+    }
+    if (!weeks.length) throw new Error("There are no saved weeks to export yet.");
+    if (!weeks.some((week) => week.current)) weeks[0]!.current = true;
+    const ledger = await readLedger(sql);
+    const buffer = await buildTransferWorkbook({ weeks, ledger });
+    const bytes = Buffer.from(buffer);
+    return {
+      fileName: "Fontenot-saved-data.xlsx",
+      base64: bytes.toString("base64"),
+      weeks: weeks.length,
+    };
+  });
 
 export const deleteArchiveWeek = createServerFn({ method: "POST" })
   .middleware([optionalAuth])
