@@ -16,7 +16,7 @@ import { Card, CardHeader, CardHint, CardTitle } from "@/components/ui/card";
 import { DailyLine, IssuePie, VolumeBar, issueSliceColor } from "@/components/engine/charts";
 import { PmOverviewCard, PmPasteCard, PmTab, RoomsTab } from "@/components/engine/pm-panel";
 import { PmBoard } from "@/components/engine/pm-board";
-import { formatMdY, formatShiftStamp, pctLabel, toIsoDate, weekdayName } from "@/lib/engine/duration.ts";
+import { formatMdY, formatShiftStamp, formatDuration, pctLabel, secondsBetween, toIsoDate, weekdayName } from "@/lib/engine/duration.ts";
 import { workOrdersForIssue } from "@/lib/engine/compute.ts";
 import { siteAccess } from "@/lib/access.functions";
 import { SiteSignIn } from "@/components/engine/site-login";
@@ -713,7 +713,7 @@ function EngineerOrders({
           <table className="w-full min-w-[920px] text-left text-sm">
             <thead className="sticky top-0 bg-primary text-primary-fg">
               <tr>
-                {["WO", "Area", "Item", "Created", "Actioned", "Completed", "Response"].map((h) => (
+                {["WO", "Area", "Item", "Created", "Actioned", "Completed", "Response", "To complete"].map((h) => (
                   <th key={h} className="px-3 py-2 text-xs font-medium uppercase tracking-wider">
                     {h}
                   </th>
@@ -728,6 +728,7 @@ function EngineerOrders({
                   <td className="px-3 py-2">{w.itemType}</td>
                   <ClockCells wo={w} />
                   <td className="px-3 py-2 font-mono tabular-nums">{w.responseTime || "—"}</td>
+                  <td className="px-3 py-2 font-mono tabular-nums">{completionLabel(w)}</td>
                 </tr>
               ))}
             </tbody>
@@ -838,7 +839,7 @@ function IssueBreakdown({
         <table className="w-full min-w-[920px] text-left text-sm">
           <thead className="sticky top-0 bg-primary text-primary-fg">
             <tr>
-              {["WO", "Area", "Item", "Created", "Actioned", "Completed", "By", "Response"].map((h) => (
+              {["WO", "Area", "Item", "Created", "Actioned", "Completed", "By", "Response", "To complete"].map((h) => (
                 <th key={h} className="px-3 py-2 text-xs font-medium uppercase tracking-wider">
                   {h}
                 </th>
@@ -854,6 +855,7 @@ function IssueBreakdown({
                 <ClockCells wo={w} />
                 <td className="px-3 py-2">{w.completedBy || w.assignedTo || "—"}</td>
                 <td className="px-3 py-2 font-mono tabular-nums">{w.responseTime || "—"}</td>
+                <td className="px-3 py-2 font-mono tabular-nums">{completionLabel(w)}</td>
               </tr>
             ))}
           </tbody>
@@ -952,8 +954,7 @@ function Orders({
           <option value="pending">Pending</option>
         </select>
         <p className="text-xs text-muted">
-          {rows.length} of {report.workOrders.length}. Created is the request. Actioned is when the response clock
-          says someone started it. Completed is the close.
+          {rows.length} of {report.workOrders.length}. Response is created to actioned. To complete is actioned to completed.
         </p>
       </div>
       {day ? (
@@ -973,7 +974,7 @@ function Orders({
         <table className="w-full min-w-[1180px] text-left text-sm">
           <thead className="sticky top-0 bg-primary text-primary-fg">
             <tr>
-              {["WO", "Status", "Area", "Item", "Created", "Actioned", "Completed", "Response", "Completed by", "Period", "SLA"].map((h) => (
+              {["WO", "Status", "Area", "Item", "Created", "Actioned", "Completed", "Response", "To complete", "Completed by", "Period", "SLA"].map((h) => (
                 <th key={h} className="px-3 py-2 text-xs font-medium uppercase tracking-wider">
                   {h}
                 </th>
@@ -983,7 +984,7 @@ function Orders({
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={11} className="px-3 py-6 text-sm text-muted">
+                <td colSpan={12} className="px-3 py-6 text-sm text-muted">
                   No work orders were logged on this day.
                 </td>
               </tr>
@@ -996,6 +997,7 @@ function Orders({
                 <td className="px-3 py-2">{w.itemType}</td>
                 <ClockCells wo={w} />
                 <td className="px-3 py-2 font-mono tabular-nums">{w.responseTime || "—"}</td>
+                <td className="px-3 py-2 font-mono tabular-nums">{completionLabel(w)}</td>
                 <td className="px-3 py-2">{w.completedBy || "—"}</td>
                 <td className="px-3 py-2 text-xs text-muted">{w.periodTag}</td>
                 <td className="px-3 py-2">
@@ -1008,6 +1010,10 @@ function Orders({
       </div>
     </Card>
   );
+}
+
+function completionLabel(wo: WorkOrder): string {
+  return formatDuration(secondsBetween(wo.actionedAt, wo.completedAt));
 }
 
 function ClockCells({ wo }: { wo: WorkOrder }) {

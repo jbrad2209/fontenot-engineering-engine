@@ -178,6 +178,14 @@ export function actionedStamp(
   return started;
 }
 
+/** Clock time from actioned to completed. Response time is created to actioned. */
+export function secondsBetween(start: string | null | undefined, end: string | null | undefined): number | null {
+  const opened = parseDateTime(start ?? null);
+  const closed = parseDateTime(end ?? null);
+  if (!opened || !closed) return null;
+  return Math.round((closed.getTime() - opened.getTime()) / 1000);
+}
+
 export function formatShiftStamp(value: string | null | undefined): string {
   const dt = parseDateTime(value ?? null);
   if (!dt) return "—";
