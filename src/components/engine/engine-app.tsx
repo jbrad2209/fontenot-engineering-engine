@@ -714,7 +714,7 @@ function EngineerOrders({
             <thead className="sticky top-0 bg-primary text-primary-fg">
               <tr>
                 {["WO", "Area", "Item", "Created", "Actioned", "Completed", "Response", "To complete"].map((h) => (
-                  <th key={h} className="px-3 py-2 text-xs font-medium uppercase tracking-wider">
+                  <th key={h} className="whitespace-nowrap px-3 py-2 text-xs font-medium uppercase tracking-wider">
                     {h}
                   </th>
                 ))}
@@ -840,7 +840,7 @@ function IssueBreakdown({
           <thead className="sticky top-0 bg-primary text-primary-fg">
             <tr>
               {["WO", "Area", "Item", "Created", "Actioned", "Completed", "By", "Response", "To complete"].map((h) => (
-                <th key={h} className="px-3 py-2 text-xs font-medium uppercase tracking-wider">
+                <th key={h} className="whitespace-nowrap px-3 py-2 text-xs font-medium uppercase tracking-wider">
                   {h}
                 </th>
               ))}
@@ -975,7 +975,7 @@ function Orders({
           <thead className="sticky top-0 bg-primary text-primary-fg">
             <tr>
               {["WO", "Status", "Area", "Item", "Created", "Actioned", "Completed", "Response", "To complete", "Completed by", "Period", "SLA"].map((h) => (
-                <th key={h} className="px-3 py-2 text-xs font-medium uppercase tracking-wider">
+                <th key={h} className="whitespace-nowrap px-3 py-2 text-xs font-medium uppercase tracking-wider">
                   {h}
                 </th>
               ))}
